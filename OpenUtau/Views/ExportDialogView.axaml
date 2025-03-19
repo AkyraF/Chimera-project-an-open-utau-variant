@@ -1,0 +1,31 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:OpenUtau.App.ViewModels"
+        Title="Export Options"
+        Width="500" Height="300"
+        Icon="avares://OpenUtau/Assets/icon.ico">
+    <Window.DataContext>
+        <vm:ExportDialogViewModel/>
+    </Window.DataContext>
+    
+    <Grid RowDefinitions="Auto, Auto, Auto, Auto, Auto">
+        <!-- 🔹 Export Type Selection -->
+        <TextBlock Text="Select Export Type:" Margin="10"/>
+        <ComboBox Items="{Binding ExportOptions}" 
+                  SelectedItem="{Binding SelectedOption}"
+                  Margin="10"/>
+
+        <!-- 🔹 Export Path Selection -->
+        <TextBlock Text="Export Folder:" Margin="10" Grid.Row="1"/>
+        <StackPanel Orientation="Horizontal" Grid.Row="2" Margin="10">
+            <TextBox Text="{Binding ExportPath}" Width="300" IsReadOnly="True"/>
+            <Button Content="..." Command="{Binding SelectFolderCommand}" Width="30"/>
+        </StackPanel>
+
+        <!-- 🔹 Export Progress -->
+        <ProgressBar Minimum="0" Maximum="100" Value="{Binding ExportProgress}" Height="20" Grid.Row="3" Margin="10"/>
+
+        <!-- 🔹 Export Button -->
+        <Button Content="Export" Command="{Binding ExportCommand}" Grid.Row="4" Margin="10"/>
+    </Grid>
+</Window>
