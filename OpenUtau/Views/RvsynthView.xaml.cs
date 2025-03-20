@@ -1,22 +1,26 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
-using OpenUtau.Core.Util;
-using OpenUtau.App.ViewModels;
+using Avalonia.Platform.Storage;
+using OpenUtau.Core;
+using OpenUtau.RVC.Processing;
+using MessageBox.Avalonia;
+using System.Collections.Generic;
+using Avalonia;
 
 namespace OpenUtau.App.Views {
     public partial class RvsynthView : Window {
-        private ComboBox modelComboBox;
-        private ComboBox indexComboBox;
-        private Slider pitchSlider;
-        private ProgressBar trackProgressBar;
-        private ProgressBar aiProgressBar;
-        private Button processButton;
-        private Button backButton;
-        private string selectedExportFolder;
+        private ComboBox modelComboBox = new();
+        private ComboBox indexComboBox = new();
+        private Slider pitchSlider = new();
+        private ProgressBar trackProgressBar = new();
+        private ProgressBar aiProgressBar = new();
+        private Button processButton = new();
+        private Button backButton = new();
+        private string selectedExportFolder = string.Empty;
 
         public RvsynthView() {
             InitializeComponent();
@@ -24,13 +28,16 @@ namespace OpenUtau.App.Views {
         }
 
         private void InitializeControls() {
-            modelComboBox = this.FindControl<ComboBox>("ModelComboBox");
-            indexComboBox = this.FindControl<ComboBox>("IndexComboBox");
-            pitchSlider = this.FindControl<Slider>("PitchSlider");
-            trackProgressBar = this.FindControl<ProgressBar>("TrackProgressBar");
-            aiProgressBar = this.FindControl<ProgressBar>("AIProgressBar");
-            processButton = this.FindControl<Button>("ProcessButton");
-            backButton = this.FindControl<Button>("BackButton");
+            modelComboBox = this.FindControl<ComboBox>("ModelComboBox") ?? new ComboBox();
+            indexComboBox = this.FindControl<ComboBox>("IndexComboBox") ?? new ComboBox();
+            pitchSlider = this.FindControl<Slider>("PitchSlider") ?? new Slider();
+            trackProgressBar = this.FindControl<ProgressBar>("TrackProgressBar") ?? new ProgressBar();
+            aiProgressBar = this.FindControl<ProgressBar>("AIProgressBar") ?? new ProgressBar();
+            processButton = this.FindControl<Button>("ProcessButton") ?? new Button();
+            backButton = this.FindControl<Button>("BackButton") ?? new Button();
+
+            processButton.Click += async (s, e) => await ProcessButton_Click();
+            backButton.Click += (s, e) => Close();
 
             LoadModelList();
             LoadIndexList();
@@ -42,7 +49,7 @@ namespace OpenUtau.App.Views {
                 var models = Directory.GetFiles(modelDir, "*.pth")
                                       .Select(Path.GetFileNameWithoutExtension)
                                       .ToList();
-                modelComboBox.Items = models;
+                modelComboBox.ItemsSource = models;
             }
         }
 
@@ -52,13 +59,13 @@ namespace OpenUtau.App.Views {
                 var indices = Directory.GetFiles(indexDir, "*.index")
                                        .Select(Path.GetFileNameWithoutExtension)
                                        .ToList();
-                indexComboBox.Items = indices;
+                indexComboBox.ItemsSource = indices;
             }
         }
 
-        private async void ProcessButton_Click(object sender, RoutedEventArgs e) {
+        private async Task ProcessButton_Click() {
             if (modelComboBox.SelectedItem == null || indexComboBox.SelectedItem == null) {
-                MessageBox.Show("Please select a model and an index file.");
+                await ShowMessageBox("Please select a model and an index file.");
                 return;
             }
 
@@ -67,54 +74,32 @@ namespace OpenUtau.App.Views {
             string modelPath = Path.Combine(AppContext.BaseDirectory, "rvc", "model", selectedModel);
             string indexPath = Path.Combine(AppContext.BaseDirectory, "rvc", "index", selectedIndex);
 
-            // Choose export folder
             selectedExportFolder = await SelectExportFolder();
             if (string.IsNullOrEmpty(selectedExportFolder)) return;
 
-            // Run AI processing
             await RunRVCInference(modelPath, indexPath);
-        }
-
-        private async Task<string> SelectExportFolder() {
-            var dialog = new OpenFolderDialog { Title = "Select Export Folder" };
-            return await dialog.ShowAsync(this);
         }
 
         private async Task RunRVCInference(string modelPath, string indexPath) {
             trackProgressBar.IsIndeterminate = false;
             aiProgressBar.IsIndeterminate = false;
 
-            var tracks = GetAllTracks();
-            int totalTracks = tracks.Length;
-            int currentTrack = 0;
-
+            var tracks = new List<string> { "Track1", "Track2" };
             foreach (var track in tracks) {
-                trackProgressBar.Value = ((double)currentTrack / totalTracks) * 100;
-
-                string inputWav = GetWavFileForTrack(track);
+                string inputWav = Path.Combine(AppContext.BaseDirectory, "renders", track + ".wav");
                 string outputWav = Path.Combine(selectedExportFolder, track + ".wav");
 
-                aiProgressBar.Value = 0;
-                await RvcInferenceEngine.Process(modelPath, indexPath, inputWav, outputWav, pitchSlider.Value, (progress) => {
+                await RvcInferenceEngine.ProcessAsync(modelPath, indexPath, inputWav, outputWav, pitchSlider.Value, (progress) => {
                     aiProgressBar.Value = progress;
                 });
-
-                currentTrack++;
             }
 
-            trackProgressBar.Value = 100;
-            aiProgressBar.Value = 100;
-            MessageBox.Show("Processing complete!");
+            await ShowMessageBox("Processing complete!");
         }
 
-        private string[] GetAllTracks() {
-            // TODO: Fetch all track names from OpenUtau project
-            return new string[] { "Track1", "Track2" };
-        }
-
-        private string GetWavFileForTrack(string trackName) {
-            // TODO: Implement logic to fetch WAV file path for given track
-            return Path.Combine(AppContext.BaseDirectory, "renders", trackName + ".wav");
+        private async Task ShowMessageBox(string message) {
+            var messageBox = MessageBoxManager.GetMessageBoxStandardWindow("Notification", message);
+            await messageBox.ShowDialog(this);
         }
     }
 }

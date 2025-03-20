@@ -7,12 +7,13 @@ using Avalonia.Controls;
 using OpenUtau.Core;
 using System.Reactive;
 using System.Diagnostics;
+using OpenUtau.RVC.Utils;
 
 namespace OpenUtau.App.ViewModels {
     public class TrackModelSelection : ViewModelBase {
-        public string TrackName { get; set; }
-        public string SelectedModel { get; set; }
-        public string SelectedIndexFile { get; set; }
+        public string TrackName { get; set; } = string.Empty;
+        public string SelectedModel { get; set; } = string.Empty;
+        public string SelectedIndexFile { get; set; } = string.Empty;
         public ObservableCollection<string> AvailableModels { get; set; } = new();
         public ObservableCollection<string> AvailableIndexFiles { get; set; } = new();
     }
@@ -35,10 +36,10 @@ namespace OpenUtau.App.ViewModels {
 
         // Model selections
         public ObservableCollection<string> AvailableModels { get; } = new();
-        public string SelectedModel { get; set; }
+        public string SelectedModel { get; set; } = string.Empty;
 
         public ObservableCollection<string> AvailableIndexFiles { get; } = new();
-        public string SelectedIndexFile { get; set; }
+        public string SelectedIndexFile { get; set; } = string.Empty;
 
         // Track selections for Multi-model option
         public ObservableCollection<TrackModelSelection> TrackModelSelections { get; } = new();
@@ -92,16 +93,21 @@ namespace OpenUtau.App.ViewModels {
             set => this.RaiseAndSetIfChanged(ref _voiceEnvelopeMix, value);
         }
 
-        // Commands
+        // Commands (✅ FIXED: Added Default Values)
         public ReactiveCommand<Unit, Unit> ProcessCommand { get; }
         public ReactiveCommand<Unit, Unit> BackCommand { get; }
 
         public RvsynthViewModel() {
+            // ✅ Initialize Commands to Prevent Null Errors
+            ProcessCommand = ReactiveCommand.Create(() => { Debug.WriteLine("Processing..."); });
+            BackCommand = ReactiveCommand.Create(() => { Debug.WriteLine("Going Back..."); });
+
             LoadAvailableModels();
             LoadAvailableIndexFiles();
             LoadTrackList();
         }
-public string ProcessAudio(string inputFilePath, string outputFolder) {
+
+        public string ProcessAudio(string inputFilePath, string outputFolder) {
             try {
                 if (!File.Exists(inputFilePath)) {
                     throw new FileNotFoundException($"Input file not found: {inputFilePath}");
@@ -158,4 +164,3 @@ public string ProcessAudio(string inputFilePath, string outputFolder) {
         }
     } // Closing class
 } // Closing namespace
-

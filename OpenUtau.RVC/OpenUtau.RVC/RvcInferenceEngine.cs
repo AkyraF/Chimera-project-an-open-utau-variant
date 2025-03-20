@@ -59,6 +59,13 @@ namespace OpenUtau.RVC.Processing {
             }
         }
 
+        public static class RvcInferenceEngine {
+            public static async Task Process(string modelPath, string indexPath, string inputPath, string outputPath, double pitch, Action<double> progressCallback) {
+                await Task.Delay(1000); // Simulate AI processing
+                progressCallback(100);
+            }
+        }
+
         private float[] RunInference(float[] inputAudio) {
             return isOnnx ? RunOnnxInference(inputAudio) : RunTorchInference(inputAudio);
         }

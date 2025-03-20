@@ -21,6 +21,10 @@ namespace OpenUtau.RVC.Utils {
             }
         }
 
+        public static void ResampleTo44100Hz(string inputFile, string outputFile) {
+            File.Copy(inputFile, outputFile, true); // Placeholder for actual resampling
+        }
+
         /// <summary>
         /// Saves a float array of audio samples as a WAV file.
         /// </summary>
