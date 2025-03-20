@@ -4,7 +4,8 @@ using System.IO;
 using System.Linq;
 using NAudio.Wave;
 using TorchSharp;
-using TorchSharp.Tensor;
+using TorchSharp.Modules;
+using static TorchSharp.torch;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using OpenUtau.RVC.Utils; // Ensure WavUtils is included
@@ -27,14 +28,16 @@ namespace OpenUtau.RVC.Processing {
         }
 
         private void LoadModel() {
-            if (isOnnx) {
-                // Load ONNX model
-                onnxSession = new InferenceSession(modelPath);
-                Debug.WriteLine("ONNX model loaded successfully.");
-            } else {
-                // Load Torch (.pth) model
-                torchModel = torch.jit.load(modelPath);
-                Debug.WriteLine("Torch (.pth) model loaded successfully.");
+            try {
+                if (isOnnx) {
+                    onnxSession = new InferenceSession(modelPath);
+                    Debug.WriteLine("ONNX model loaded successfully.");
+                } else {
+                    torchModel = torch.jit.load(modelPath);
+                    Debug.WriteLine("Torch (.pth) model loaded successfully.");
+                }
+            } catch (Exception ex) {
+                Debug.WriteLine($"Error loading model: {ex.Message}");
             }
         }
 
@@ -46,22 +49,26 @@ namespace OpenUtau.RVC.Processing {
 
                 string tempFile = Path.Combine(Path.GetTempPath(), "temp_resampled.wav");
 
-                // 🔹 Step 1: Ensure input WAV is resampled to 44100 Hz
-                WavUtils.ResampleTo44100Hz(inputFilePath, tempFile);
+                // 🔹 Ensure input WAV is resampled to 44100 Hz
+                WavUtils.Ensure44100Hz(inputFilePath, tempFile);
 
-                // 🔹 Step 2: Prepare output file path
+                // 🔹 Prepare output file path
                 string outputFilePath = Path.Combine(outputFolder, "rvc_output.wav");
 
-                // 🔹 Step 3: Run inference
-                float[] audioData = WavUtils.ReadWavToFloatArray(tempFile);
+                // 🔹 Load audio data
+                float[] audioData = WavUtils.LoadWav(tempFile, out int sampleRate, out int channels);
+                if (audioData == null || audioData.Length == 0) {
+                    throw new Exception("Failed to load input WAV.");
+                }
+
+                // 🔹 Run inference
                 float[] processedAudio = RunInference(audioData);
 
-                // 🔹 Step 4: Save processed audio
-                WavUtils.WriteFloatArrayToWav(outputFilePath, processedAudio, 44100);
+                // 🔹 Save processed audio
+                WavUtils.SaveWav(outputFilePath, processedAudio, channels);
 
                 return outputFilePath;
-            }
-            catch (Exception ex) {
+            } catch (Exception ex) {
                 Debug.WriteLine($"[RvcInferenceEngine] Error: {ex.Message}");
                 return string.Empty;
             }
@@ -79,7 +86,7 @@ namespace OpenUtau.RVC.Processing {
             var inputTensor = new DenseTensor<float>(inputAudio, new[] { 1, inputAudio.Length });
 
             var inputs = new NamedOnnxValue[] {
-                NamedOnnxValue.CreateFromTensor("input", inputTensor)
+                NamedOnnxValue.CreateFromTensor("input", inputTensor) // Ensure the input name matches the model
             };
 
             using var results = onnxSession.Run(inputs);
@@ -89,7 +96,7 @@ namespace OpenUtau.RVC.Processing {
 
         private float[] RunTorchInference(float[] inputAudio) {
             using var inputTensor = torch.tensor(inputAudio, new long[] { 1, inputAudio.Length });
-            using var outputTensor = torchModel.forward(inputTensor).to_type(torch.ScalarType.Float32);
+            using var outputTensor = torchModel.call(inputTensor).to_type(torch.ScalarType.Float32); // Ensure proper call
 
             return outputTensor.data<float>().ToArray();
         }
