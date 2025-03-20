@@ -2,13 +2,13 @@
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using NAudio.Wave;
 using TorchSharp;
 using TorchSharp.Modules;
-using static TorchSharp.torch;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
-using OpenUtau.RVC.Utils; // Ensure WavUtils is included
+using OpenUtau.RVC.Utils; // Ensure correct WavUtils namespace
 
 namespace OpenUtau.RVC.Processing {
     public class RvcInferenceEngine {
@@ -28,65 +28,45 @@ namespace OpenUtau.RVC.Processing {
         }
 
         private void LoadModel() {
-            try {
-                if (isOnnx) {
-                    onnxSession = new InferenceSession(modelPath);
-                    Debug.WriteLine("ONNX model loaded successfully.");
-                } else {
-                    torchModel = torch.jit.load(modelPath);
-                    Debug.WriteLine("Torch (.pth) model loaded successfully.");
-                }
-            } catch (Exception ex) {
-                Debug.WriteLine($"Error loading model: {ex.Message}");
+            if (isOnnx) {
+                onnxSession = new InferenceSession(modelPath);
+                Debug.WriteLine("✅ ONNX model loaded successfully.");
+            } else {
+                torchModel = torch.jit.load(modelPath);
+                Debug.WriteLine($"✅ Torch (.pth) model loaded successfully. Model Type: {torchModel?.GetType()}");
             }
         }
 
-        public string ProcessAudio(string inputFilePath, string outputFolder) {
+        public async Task ProcessAsync(string inputWav, string outputWav, double pitchShift, Action<int> progressCallback) {
             try {
-                if (!File.Exists(inputFilePath)) {
-                    throw new FileNotFoundException($"Input file not found: {inputFilePath}");
+                if (torchModel == null && !isOnnx) {
+                    LoadModel();
                 }
 
-                string tempFile = Path.Combine(Path.GetTempPath(), "temp_resampled.wav");
-
-                // 🔹 Ensure input WAV is resampled to 44100 Hz
-                WavUtils.Ensure44100Hz(inputFilePath, tempFile);
-
-                // 🔹 Prepare output file path
-                string outputFilePath = Path.Combine(outputFolder, "rvc_output.wav");
-
-                // 🔹 Load audio data
-                float[] audioData = WavUtils.LoadWav(tempFile, out int sampleRate, out int channels);
-                if (audioData == null || audioData.Length == 0) {
-                    throw new Exception("Failed to load input WAV.");
+                float[] inputAudio = WavUtils.ReadWavToFloatArray(inputWav, out int sampleRate, out int channels);
+                if (inputAudio == null || inputAudio.Length == 0) {
+                    throw new Exception("❌ Failed to read input WAV.");
                 }
 
-                // 🔹 Run inference
-                float[] processedAudio = RunInference(audioData);
+                float[] outputAudio = RunInference(inputAudio);
 
-                // 🔹 Save processed audio
-                WavUtils.SaveWav(outputFilePath, processedAudio, channels);
+                WavUtils.WriteFloatArrayToWav(outputWav, outputAudio, 44100, channels);
 
-                return outputFilePath;
+                progressCallback?.Invoke(100);
+                Debug.WriteLine("✅ RVC Inference completed.");
             } catch (Exception ex) {
-                Debug.WriteLine($"[RvcInferenceEngine] Error: {ex.Message}");
-                return string.Empty;
+                Console.WriteLine($"❌ Error during RVC processing: {ex.Message}");
             }
         }
 
         private float[] RunInference(float[] inputAudio) {
-            if (isOnnx) {
-                return RunOnnxInference(inputAudio);
-            } else {
-                return RunTorchInference(inputAudio);
-            }
+            return isOnnx ? RunOnnxInference(inputAudio) : RunTorchInference(inputAudio);
         }
 
         private float[] RunOnnxInference(float[] inputAudio) {
             var inputTensor = new DenseTensor<float>(inputAudio, new[] { 1, inputAudio.Length });
-
             var inputs = new NamedOnnxValue[] {
-                NamedOnnxValue.CreateFromTensor("input", inputTensor) // Ensure the input name matches the model
+                NamedOnnxValue.CreateFromTensor("input", inputTensor)
             };
 
             using var results = onnxSession.Run(inputs);
@@ -95,10 +75,57 @@ namespace OpenUtau.RVC.Processing {
         }
 
         private float[] RunTorchInference(float[] inputAudio) {
-            using var inputTensor = torch.tensor(inputAudio, new long[] { 1, inputAudio.Length });
-            using var outputTensor = torchModel.call(inputTensor).to_type(torch.ScalarType.Float32); // Ensure proper call
+            string pythonPath = "python";
+            string pthModelPath = this.modelPath;
+            string ptModelPath = Path.ChangeExtension(pthModelPath, ".pt");
 
-            return outputTensor.data<float>().ToArray();
+            if (!File.Exists(ptModelPath)) {
+                Console.WriteLine($"🔹 Converting {pthModelPath} to TorchScript (.pt)...");
+                ConvertPthToPt(pthModelPath, ptModelPath);
+            }
+
+            if (!File.Exists(ptModelPath)) {
+                Console.WriteLine("❌ Error: Failed to convert .pth to .pt");
+                return new float[0];
+            }
+
+            try {
+                var torchModel = torch.jit.load(ptModelPath);
+
+                using var inputTensor = torch.tensor(inputAudio, new long[] { 1, inputAudio.Length });
+
+                torchModel.eval();
+                var result = torchModel.call(inputTensor);
+                if (result is torch.Tensor outputTensor) {
+                    return outputTensor.data<float>().ToArray();
+                }
+
+                throw new Exception("❌ Torch model returned an unexpected output type.");
+            } catch (Exception ex) {
+                Console.WriteLine($"❌ Torch Inference Error: {ex.Message}");
+                return new float[0];
+            }
+        }
+
+        private void ConvertPthToPt(string pthModelPath, string ptModelPath) {
+            try {
+                ProcessStartInfo psi = new ProcessStartInfo {
+                    FileName = "python",
+                    Arguments = "\"convert_pth_to_pt.py\" \"" + pthModelPath + "\" \"" + ptModelPath + "\"",
+                    RedirectStandardOutput = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+
+                using Process process = Process.Start(psi);
+                using StreamReader reader = process.StandardOutput;
+                string output = reader.ReadToEnd();
+                process.WaitForExit();
+
+                Console.WriteLine($"🔹 Conversion Output: {output}");
+            } catch (Exception ex) {
+                Console.WriteLine($"❌ Python Conversion Error: {ex.Message}");
+            }
         }
     }
 }

@@ -63,7 +63,7 @@ namespace OpenUtau.App.ViewModels {
 
             OpenRecentCommand = ReactiveCommand.Create<string>(file => {
                 try {
-                    OpenProject(new[] { file });
+                    //OpenProject(new[] { file });
                 } catch (Exception e) {
                     var customEx = new MessageCustomizableException("Failed to open recent", "<translate:errors.failed.openfile>: recent project", e);
                     DocManager.Inst.ExecuteCmd(new ErrorMessageNotification(customEx));
@@ -72,7 +72,7 @@ namespace OpenUtau.App.ViewModels {
 
             OpenTemplateCommand = ReactiveCommand.Create<string>(file => {
                 try {
-                    OpenProject(new[] { file });
+                    //OpenProject(new[] { file });//
                     DocManager.Inst.Project.Saved = false;
                     DocManager.Inst.Project.FilePath = string.Empty;
                 } catch (Exception e) {

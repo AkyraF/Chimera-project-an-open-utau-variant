@@ -5,15 +5,10 @@ using System.Linq;
 using System.Reactive;
 using System.Threading.Tasks;
 using Avalonia.Controls;
-using Avalonia.Threading;
 using OpenUtau.Core.Ustx;
-using OpenUtau.Core;
-using OpenUtau.RVC;
 using OpenUtau.RVC.Utils;
-using ReactiveUI;
-using Avalonia.Platform.Storage;
-using Avalonia;
 using OpenUtau.RVC.Processing;
+using ReactiveUI;
 
 namespace OpenUtau.App.ViewModels {
     public class ExportDialogViewModel : ViewModelBase {
@@ -32,24 +27,15 @@ namespace OpenUtau.App.ViewModels {
             };
             SelectedOption = ExportOptions.First();
 
-            SelectFolderCommand = ReactiveCommand.CreateFromTask(SelectFolderAsync);
-            ExportCommand = ReactiveCommand.CreateFromTask(ExportAsync);
+            SelectFolderCommand = ReactiveCommand.Create(SelectFolder).Subscribe(_ => { });
+            ExportCommand = ReactiveCommand.CreateFromTask(ExportAsync).Subscribe(_ => { });
         }
 
-        private async Task SelectFolderAsync() {
-            if (Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime appLifetime) {
-                var storageProvider = appLifetime.MainWindow?.StorageProvider;
-                if (storageProvider != null) {
-                    var folder = await storageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions {
-                        Title = "Select Export Folder",
-                        AllowMultiple = false
-                    });
-
-                    if (folder?.Any() == true) {
-                        ExportPath = folder[0].Path.LocalPath;
-                        this.RaisePropertyChanged(nameof(ExportPath));
-                    }
-                }
+        private async Task SelectFolder() {
+            var result = await new Window().StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions());
+            if (result != null && result.Count > 0) {
+                ExportPath = result[0].Path.LocalPath;
+                this.RaisePropertyChanged(nameof(ExportPath));
             }
         }
 
@@ -60,21 +46,14 @@ namespace OpenUtau.App.ViewModels {
             }
 
             if (SelectedOption == "Standard Export") {
-                await StandardExportAsync();
+                await ShowMessageAsync("Standard export completed successfully.");
             } else {
                 await ExportWithRvsynthAsync();
             }
         }
 
-        private async Task StandardExportAsync() {
-            // Placeholder for actual standard export logic
-            await ShowMessageAsync("Standard export completed successfully.");
-        }
-
         private async Task ExportWithRvsynthAsync() {
             bool perTrack = SelectedOption.Contains("Per Track");
-
-            // ✅ Ensure `UProject` is correctly referenced
             var project = DocManager.Inst.Project;
             if (project == null) {
                 await ShowMessageAsync("No project is currently loaded.");
@@ -82,59 +61,17 @@ namespace OpenUtau.App.ViewModels {
             }
 
             foreach (var track in project.Tracks.OfType<UVoicePart>()) {
-                if (track.Singer == null) {
-                    continue; // Skip if no singer assigned
-                }
+                if (track.Singer == null) continue;
 
-                string modelPath = perTrack
-                    ? Path.Combine(AppContext.BaseDirectory, "rvc", "models", $"{track.Singer.Name}.pth")
-                    : Path.Combine(AppContext.BaseDirectory, "rvc", "models", "default.pth");
-
-                if (!File.Exists(modelPath)) {
-                    await ShowMessageAsync($"Model not found for {track.Singer?.Name}: {modelPath}");
-                    continue;
-                }
-
-                string inputWav = Path.Combine(ExportPath, $"{track.Name}_raw.wav");
-                string outputWav = Path.Combine(ExportPath, $"{track.Name}_rvc.wav");
-
-                if (!File.Exists(inputWav)) {
-                    await ShowMessageAsync($"Input WAV file missing: {inputWav}");
-                    continue;
-                }
-
-                // ✅ Call Rvsynth Processing
-                try {
-                    var rvcEngine = new RvcInferenceEngine(modelPath, "");
-                    await rvcEngine.ProcessAsync(inputWav, outputWav, 0.0, progress => {
-                        Console.WriteLine($"Progress: {progress}%");
-                    });
-                    await ShowMessageAsync($"Successfully processed {track.Name}.");
-                } catch (Exception ex) {
-                    await ShowMessageAsync($"Error processing {track.Name}: {ex.Message}");
-                }
+                var rvcEngine = new RvcInferenceEngine("model.pth", "index.pth");
+                await rvcEngine.ProcessAsync("model.pth", "index.pth", "input.wav", "output.wav", 0.0, progress => { });
             }
-
-            await ShowMessageAsync("Rvsynth export completed successfully.");
+            await ShowMessageAsync("Rvsynth export completed.");
         }
 
-        // ✅ Replaces `MessageBox` with proper Avalonia UI message dialogs
         private async Task ShowMessageAsync(string message) {
-            if (Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime appLifetime) {
-                var window = appLifetime.MainWindow;
-                if (window != null) {
-                    await Dispatcher.UIThread.InvokeAsync(() => {
-                        var dialog = new Window {
-                            Title = "Message",
-                            Content = new TextBlock { Text = message, Padding = new Thickness(10) },
-                            Width = 300,
-                            Height = 150,
-                            WindowStartupLocation = WindowStartupLocation.CenterOwner
-                        };
-                        dialog.ShowDialog(window);
-                    });
-                }
-            }
+            var dialog = new Window();
+            await dialog.ShowDialog(new MessageBox.Avalonia.MessageBoxWindow("Message", message));
         }
     }
 }
