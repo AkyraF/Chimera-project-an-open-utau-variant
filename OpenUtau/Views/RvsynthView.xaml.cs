@@ -33,7 +33,18 @@ namespace OpenUtau.App.Views {
             InitializeControls();
 
             // This avoids the CS8618 error by giving 'engine' a non-null value
-            engine = new RvcInferenceEngine("dummy_model.pth", "dummy_index.index");
+            try {
+                string modelPath = Path.Combine(AppContext.BaseDirectory, "rvc", "model", "dummy_model.pth");
+                string indexPath = Path.Combine(AppContext.BaseDirectory, "rvc", "index", "dummy_index.index");
+
+                if (File.Exists(modelPath) && File.Exists(indexPath)) {
+                    engine = new RvcInferenceEngine(modelPath, indexPath);
+                } else {
+                    engine = null!;
+                }
+            } catch {
+                engine = null!;
+            }
         }
 
         private void InitializeControls() {

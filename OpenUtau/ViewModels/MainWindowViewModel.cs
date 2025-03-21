@@ -10,6 +10,7 @@ using DynamicData.Binding;
 using OpenUtau.App.Views;
 using OpenUtau.Core;
 using OpenUtau.Core.Ustx;
+using Avalonia.Controls.ApplicationLifetimes;
 using ReactiveUI;
 using Avalonia;
 using Avalonia.Controls;
@@ -106,20 +107,28 @@ namespace OpenUtau.App.ViewModels {
             TracksViewModel = new TracksViewModel();
             ClearCacheHeader = string.Empty;
             ProgressText = string.Empty;
+
             OpenRecentCommand = ReactiveCommand.Create<string>(file => {
                 try {
                     OpenProject(new[] { file });
                 } catch (Exception e) {
                     var customEx = new MessageCustomizableException("Failed to open recent", "<translate:errors.failed.openfile>: recent project", e);
-                    // ✅ Load Available RVC Models & Indexes
                     LoadRVCModels();
                     LoadRVCIndexes();
-
-                    // ✅ Create Command for Processing RVC
                     ProcessRVCCommand = ReactiveCommand.Create(ProcessRVC);
                     DocManager.Inst.ExecuteCmd(new ErrorMessageNotification(customEx));
                 }
             });
+
+            // ✅ ✅ ✅ ADD THIS BLOCK RIGHT HERE:
+            OnMenuRvsynthCommand = ReactiveCommand.Create(() => {
+                var window = new RvsynthView();
+                window.Show(); // No owner
+            });
+
+
+            // ✅ ✅ ✅ END INSERT
+
             OpenTemplateCommand = ReactiveCommand.Create<string>(file => {
                 try {
                     OpenProject(new[] { file });
@@ -130,15 +139,17 @@ namespace OpenUtau.App.ViewModels {
                     DocManager.Inst.ExecuteCmd(new ErrorMessageNotification(customEx));
                 }
             });
+
             PartDeleteCommand = ReactiveCommand.Create<UPart>(part => {
                 TracksViewModel.DeleteSelectedParts();
             });
+
             ProcessRVCCommand = ReactiveCommand.Create(ProcessRVC);
             LoadRVCModels();
             LoadRVCIndexes();
             DocManager.Inst.AddSubscriber(this);
         }
-       
+
         private void ShowMessageBox(string message) {
             var dialog = new Window {
                 Title = "Message",
@@ -166,6 +177,10 @@ namespace OpenUtau.App.ViewModels {
                 } catch (Exception e) {
                     var customEx = new MessageCustomizableException($"Failed to open file {args[1]}", $"<translate:errors.failed.openfile>: {args[1]}", e);
                     DocManager.Inst.ExecuteCmd(new ErrorMessageNotification(customEx));
+                    OnMenuRvsynthCommand = ReactiveCommand.Create(() => {
+                        var rvsynthView = new RvsynthView();
+                        rvsynthView.Show();
+                    });
                 }
             }
             NewProject();
