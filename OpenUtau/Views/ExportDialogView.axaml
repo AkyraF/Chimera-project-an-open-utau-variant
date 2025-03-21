@@ -11,9 +11,9 @@
     <Grid RowDefinitions="Auto, Auto, Auto, Auto, Auto">
         <!-- 🔹 Export Type Selection -->
         <TextBlock Text="Select Export Type:" Margin="10"/>
-        <ComboBox Items="{Binding ExportOptions}" 
-                  SelectedItem="{Binding SelectedOption}"
-                  Margin="10"/>
+        <ComboBox ItemsSource="{Binding ExportOptions}" />
+        SelectedItem="{Binding SelectedOption}"
+        Margin="10"/>
 
         <!-- 🔹 Export Path Selection -->
         <TextBlock Text="Export Folder:" Margin="10" Grid.Row="1"/>

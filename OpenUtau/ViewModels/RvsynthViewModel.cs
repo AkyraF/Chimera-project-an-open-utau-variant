@@ -8,6 +8,10 @@ using OpenUtau.Core;
 using System.Reactive;
 using System.Diagnostics;
 using OpenUtau.RVC.Utils;
+using OpenUtau.RVC.Processing;
+using Microsoft.ML.OnnxRuntime.Tensors;
+using Microsoft.ML.OnnxRuntime;
+using TorchSharp;
 
 namespace OpenUtau.App.ViewModels {
     public class TrackModelSelection : ViewModelBase {
@@ -107,27 +111,32 @@ namespace OpenUtau.App.ViewModels {
             LoadTrackList();
         }
 
-        public string ProcessAudio(string inputFilePath, string outputFolder) {
-            try {
-                if (!File.Exists(inputFilePath)) {
-                    throw new FileNotFoundException($"Input file not found: {inputFilePath}");
+        private float[] RunInference(float[] inputAudio, string modelPath, string indexPath) {
+            bool isOnnx = modelPath.EndsWith(".onnx");
+
+            if (isOnnx) {
+                var inputTensor = new DenseTensor<float>(inputAudio, new[] { 1, inputAudio.Length });
+                var inputs = new NamedOnnxValue[] {
+            NamedOnnxValue.CreateFromTensor("input", inputTensor)
+        };
+
+                using var onnxSession = new InferenceSession(modelPath);
+                using var results = onnxSession.Run(inputs);
+                var outputTensor = results.First().AsTensor<float>();
+                return outputTensor.ToArray();
+            } else {
+                var torchModel = torch.jit.load(modelPath);
+                using var inputTensor = torch.tensor(inputAudio, new long[] { 1, inputAudio.Length });
+
+                torchModel.eval();
+                var result = torchModel.call(inputTensor);
+
+                if (result is torch.Tensor outputTensor) {
+                    return outputTensor.data<float>().ToArray();
+                } else {
+                    Console.WriteLine("❌ Torch model returned unexpected output.");
+                    return new float[0];
                 }
-
-                string tempFile = Path.Combine(Path.GetTempPath(), "temp_resampled.wav");
-
-                // 🔹 Step 1: Ensure input WAV is resampled to 44100 Hz
-                WavUtils.ResampleTo44100Hz(inputFilePath, tempFile);
-
-                // 🔹 Step 2: Prepare output file path
-                string outputFilePath = Path.Combine(outputFolder, "rvc_output.wav");
-
-                // 🔹 Step 3: Run RVC inference process
-                RunInference(tempFile, outputFilePath);
-
-                return outputFilePath;
-            } catch (Exception ex) {
-                Debug.WriteLine($"[RvcInferenceEngine] Error: {ex.Message}");
-                return string.Empty;
             }
         }
 

@@ -12,6 +12,7 @@ using OpenUtau.RVC.Utils; // Ensure correct WavUtils namespace
 
 namespace OpenUtau.RVC.Processing {
     public class RvcInferenceEngine {
+        private RvcInferenceEngine engine;
         private readonly string modelPath;
         private readonly string indexPath;
         private readonly bool isOnnx;
@@ -39,31 +40,42 @@ namespace OpenUtau.RVC.Processing {
 
         public async Task ProcessAsync(string inputWav, string outputWav, double pitchShift, Action<int> progressCallback) {
             try {
+                // Ensure model is loaded
                 if (torchModel == null && !isOnnx) {
                     LoadModel();
                 }
 
+                // Log selected model/index for debug
+                Console.WriteLine($"🎯 Model: {modelPath}");
+                Console.WriteLine($"🎯 Index: {indexPath}");
+
+                // Read input audio
                 float[] inputAudio = WavUtils.ReadWavToFloatArray(inputWav, out int sampleRate, out int channels);
                 if (inputAudio == null || inputAudio.Length == 0) {
                     throw new Exception("❌ Failed to read input WAV.");
                 }
 
+                // Simulate pitch shift (you'll later implement real pitch logic)
+                Console.WriteLine($"🎵 Pitch shift: {pitchShift}");
+
+                // Run inference
                 float[] outputAudio = RunInference(inputAudio);
 
+                // Write output
                 WavUtils.WriteFloatArrayToWav(outputWav, outputAudio, 44100, channels);
 
+                // Report progress
                 progressCallback?.Invoke(100);
-                Debug.WriteLine("✅ RVC Inference completed.");
+                Console.WriteLine("✅ RVC Inference completed.");
             } catch (Exception ex) {
                 Console.WriteLine($"❌ Error during RVC processing: {ex.Message}");
+                progressCallback?.Invoke(0); // Report failure if needed
             }
         }
 
-        public static class RvcInferenceEngine {
-            public static async Task Process(string modelPath, string indexPath, string inputPath, string outputPath, double pitch, Action<double> progressCallback) {
-                await Task.Delay(1000); // Simulate AI processing
-                progressCallback(100);
-            }
+        public async Task Process(string modelPath, string indexPath, string inputPath, string outputPath, double pitch, Action<double> progressCallback) {
+            await Task.Delay(1000); // Simulate AI processing
+            progressCallback(100);
         }
 
         private float[] RunInference(float[] inputAudio) {
@@ -81,7 +93,7 @@ namespace OpenUtau.RVC.Processing {
             return outputTensor.ToArray();
         }
 
-        private float[] RunTorchInference(float[] inputAudio) {
+        public float[] RunTorchInference(float[] inputAudio) {
             string pythonPath = "python";
             string pthModelPath = this.modelPath;
             string ptModelPath = Path.ChangeExtension(pthModelPath, ".pt");
@@ -124,7 +136,7 @@ namespace OpenUtau.RVC.Processing {
                     CreateNoWindow = true
                 };
 
-                using Process process = Process.Start(psi);
+                using System.Diagnostics.Process process = System.Diagnostics.Process.Start(psi);
                 using StreamReader reader = process.StandardOutput;
                 string output = reader.ReadToEnd();
                 process.WaitForExit();

@@ -7,13 +7,19 @@ using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using OpenUtau.Core;
 using OpenUtau.RVC.Processing;
-using MessageBox.Avalonia;
+using MsBox.Avalonia;
+using MsBox.Avalonia.Enums;
+using MsBox.Avalonia.Dto;
 using System.Collections.Generic;
 using Avalonia;
+using MsBox.Avalonia.Models;
 
 namespace OpenUtau.App.Views {
     public partial class RvsynthView : Window {
         private ComboBox modelComboBox = new();
+        private RvcInferenceEngine engine = null!;
+
+        private double pitch = 0.0;
         private ComboBox indexComboBox = new();
         private Slider pitchSlider = new();
         private ProgressBar trackProgressBar = new();
@@ -25,6 +31,9 @@ namespace OpenUtau.App.Views {
         public RvsynthView() {
             InitializeComponent();
             InitializeControls();
+
+            // This avoids the CS8618 error by giving 'engine' a non-null value
+            engine = new RvcInferenceEngine("dummy_model.pth", "dummy_index.index");
         }
 
         private void InitializeControls() {
@@ -62,6 +71,15 @@ namespace OpenUtau.App.Views {
                 indexComboBox.ItemsSource = indices;
             }
         }
+        private async Task<string?> SelectExportFolder() {
+            var options = new FolderPickerOpenOptions {
+                Title = "Select Export Folder",
+                AllowMultiple = false
+            };
+
+            var folders = await this.StorageProvider.OpenFolderPickerAsync(options);
+            return folders?.FirstOrDefault()?.Path.LocalPath;
+        }
 
         private async Task ProcessButton_Click() {
             if (modelComboBox.SelectedItem == null || indexComboBox.SelectedItem == null) {
@@ -74,8 +92,9 @@ namespace OpenUtau.App.Views {
             string modelPath = Path.Combine(AppContext.BaseDirectory, "rvc", "model", selectedModel);
             string indexPath = Path.Combine(AppContext.BaseDirectory, "rvc", "index", selectedIndex);
 
-            selectedExportFolder = await SelectExportFolder();
+            selectedExportFolder = await SelectExportFolder() ?? string.Empty;
             if (string.IsNullOrEmpty(selectedExportFolder)) return;
+
 
             await RunRVCInference(modelPath, indexPath);
         }
@@ -89,7 +108,7 @@ namespace OpenUtau.App.Views {
                 string inputWav = Path.Combine(AppContext.BaseDirectory, "renders", track + ".wav");
                 string outputWav = Path.Combine(selectedExportFolder, track + ".wav");
 
-                await RvcInferenceEngine.ProcessAsync(modelPath, indexPath, inputWav, outputWav, pitchSlider.Value, (progress) => {
+                await engine.ProcessAsync(inputWav, outputWav, pitch, progress => {
                     aiProgressBar.Value = progress;
                 });
             }
@@ -98,8 +117,10 @@ namespace OpenUtau.App.Views {
         }
 
         private async Task ShowMessageBox(string message) {
-            var messageBox = MessageBoxManager.GetMessageBoxStandardWindow("Notification", message);
-            await messageBox.ShowDialog(this);
+            var messageBox = MessageBoxManager
+    .GetMessageBoxStandard("Notification", message, ButtonEnum.Ok, MsBox.Avalonia.Enums.Icon.Info);
+            await messageBox.ShowAsync();
         }
+
     }
 }

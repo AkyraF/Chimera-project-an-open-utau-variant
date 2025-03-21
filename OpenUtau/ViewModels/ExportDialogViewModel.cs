@@ -3,12 +3,20 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Reactive;
-using System.Threading.Tasks;
 using Avalonia.Controls;
+using System.Threading.Tasks;
 using OpenUtau.Core.Ustx;
 using OpenUtau.RVC.Utils;
 using OpenUtau.RVC.Processing;
+using OpenUtau.Core;
 using ReactiveUI;
+using Avalonia.Platform.Storage; // ✅ Fix for FolderPickerOpenOptions
+using MsBox.Avalonia.Dto;
+using MsBox.Avalonia.Enums;
+using MsBox.Avalonia;
+using Avalonia;
+using OpenUtau.Core.Util;
+using System.Collections.Generic;
 
 namespace OpenUtau.App.ViewModels {
     public class ExportDialogViewModel : ViewModelBase {
@@ -26,9 +34,11 @@ namespace OpenUtau.App.ViewModels {
                 "Export with Rvsynth (Per Track Model)"
             };
             SelectedOption = ExportOptions.First();
-
-            SelectFolderCommand = ReactiveCommand.Create(SelectFolder).Subscribe(_ => { });
-            ExportCommand = ReactiveCommand.CreateFromTask(ExportAsync).Subscribe(_ => { });
+            SelectFolderCommand = ReactiveCommand.CreateFromTask(SelectFolder);
+            ExportCommand = ReactiveCommand.CreateFromTask(async () => {
+                await ExportAsync();
+                return Unit.Default;
+            });
         }
 
         private async Task SelectFolder() {
@@ -54,24 +64,34 @@ namespace OpenUtau.App.ViewModels {
 
         private async Task ExportWithRvsynthAsync() {
             bool perTrack = SelectedOption.Contains("Per Track");
-            var project = DocManager.Inst.Project;
+            var project = SingletonBase<DocManager>.Inst?.Project;
             if (project == null) {
                 await ShowMessageAsync("No project is currently loaded.");
                 return;
             }
 
-            foreach (var track in project.Tracks.OfType<UVoicePart>()) {
-                if (track.Singer == null) continue;
+            foreach (var track in (project.Tracks as IEnumerable<UVoicePart>) ?? Enumerable.Empty<UVoicePart>()) {
+                // Check if track has a Singer (You might need a different property)
+                var singerProperty = track.GetType().GetProperty("Singer");
+                if (singerProperty == null) {
+                    Console.WriteLine("🚨 UVoicePart does not contain a 'Singer' property.");
+                    continue;
+                }
+
+                var singerValue = singerProperty.GetValue(track);
+                if (singerValue == null) continue;
+
+
 
                 var rvcEngine = new RvcInferenceEngine("model.pth", "index.pth");
-                await rvcEngine.ProcessAsync("model.pth", "index.pth", "input.wav", "output.wav", 0.0, progress => { });
+                await rvcEngine.ProcessAsync("input.wav", "output.wav", 0.0, progress => { });
             }
             await ShowMessageAsync("Rvsynth export completed.");
         }
 
         private async Task ShowMessageAsync(string message) {
-            var dialog = new Window();
-            await dialog.ShowDialog(new MessageBox.Avalonia.MessageBoxWindow("Message", message));
+            var messageBox = MessageBoxManager.GetMessageBoxStandard("Notification", message, ButtonEnum.Ok, Icon.Info);
+            await messageBox.ShowAsync();
         }
     }
 }

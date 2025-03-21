@@ -1,12 +1,19 @@
+﻿using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Markup.Xaml;
 using Avalonia.Interactivity;
 using OpenUtau.App.ViewModels;
+using System;
 
 namespace OpenUtau.App.Views {
     public partial class ExportDialogView : Window {
         public ExportDialogView() {
-            InitializeComponent();
+            InitializeComponent();  // Ensure this exists
             DataContext = new ExportDialogViewModel();
+        }
+
+        private void InitializeComponent() {
+            AvaloniaXamlLoader.Load(this);
         }
 
         private void OnExportClick(object sender, RoutedEventArgs e) {

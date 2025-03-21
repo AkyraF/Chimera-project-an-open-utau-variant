@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Reactive;
@@ -12,7 +13,6 @@ using OpenUtau.Core.Ustx;
 using ReactiveUI;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Media;
 using ReactiveUI.Fody.Helpers;
 using OpenUtau.RVC.Processing; // ✅ Required for RVC
 
@@ -23,53 +23,62 @@ namespace OpenUtau.App.ViewModels {
         public ObservableCollection<string> AvailableRVCModels { get; } = new();
         public ObservableCollection<string> AvailableRVCIndexes { get; } = new();
         public bool IsWavePart => Part is UWavePart;
-        public ReactiveCommand<Unit, Unit> ProcessRVCCommand { get; }
+        public ReactiveCommand<Unit, Unit> ProcessRVCCommand { get; private set; } = null!;
         public ReactiveCommand<UPart, Unit>? PartDeleteCommand { get; set; }
         public ReactiveCommand<UPart, Unit>? PartRenameCommand { get; set; }
         public ReactiveCommand<UPart, Unit>? PartGotoFileCommand { get; set; }
         public ReactiveCommand<UPart, Unit>? PartReplaceAudioCommand { get; set; }
         public ReactiveCommand<UPart, Unit>? PartTranscribeCommand { get; set; }
     }
+    
+       
+    
+        
 
-    private void LoadRVCModels() {
-            var modelPath = Path.Combine(AppContext.BaseDirectory, "rvc", "model");
-            if (Directory.Exists(modelPath)) {
-                var models = Directory.GetFiles(modelPath, "*.pth")
-                    .Select(Path.GetFileNameWithoutExtension)
-                    .ToList();
-                AvailableRVCModels.Clear();
-                AvailableRVCModels.AddRange(models);
-            }
-        }
+    public class MainWindowViewModel : ViewModelBase, ICmdSubscriber {
 
         private void LoadRVCIndexes() {
             var indexPath = Path.Combine(AppContext.BaseDirectory, "rvc", "index");
             if (Directory.Exists(indexPath)) {
                 var indexes = Directory.GetFiles(indexPath, "*.index")
                     .Select(Path.GetFileNameWithoutExtension)
+                    .Where(name => !string.IsNullOrEmpty(name))
                     .ToList();
+
                 AvailableRVCIndexes.Clear();
-                AvailableRVCIndexes.AddRange(indexes);
             }
         }
+        private void LoadRVCModels() {
+            var modelPath = Path.Combine(AppContext.BaseDirectory, "rvc", "model");
+
+            if (Directory.Exists(modelPath)) {
+                var modelList = Directory.GetFiles(modelPath, "*.pth")
+                    .Select(Path.GetFileNameWithoutExtension)
+                    .Where(name => !string.IsNullOrEmpty(name))
+                    .ToList();
+
+                AvailableRVCModels.Clear();
+            }
+        }
+
+
 
         private string GetCurrentTrackAudioPath() {
             return Path.Combine(AppContext.BaseDirectory, "renders", "current_track.wav");
         }
-
-    public class MainWindowViewModel : ViewModelBase, ICmdSubscriber {
         public bool ExtendToFrame => OS.IsMacOS();
         public string Title => !ProjectSaved
             ? $"{AppVersion}"
             : $"{(DocManager.Inst.ChangesSaved ? "" : "*")}{AppVersion} [{DocManager.Inst.Project.FilePath}]";
         [Reactive] public PlaybackViewModel PlaybackViewModel { get; set; }
         [Reactive] public TracksViewModel TracksViewModel { get; set; }
-        public ReactiveCommand<Unit, Unit> ProcessRVCCommand { get; }
+        public ReactiveCommand<Unit, Unit> ProcessRVCCommand { get; set; }
         [Reactive] public string SelectedRVCModel { get; set; } = string.Empty;
         [Reactive] public string SelectedRVCIndex { get; set; } = string.Empty;
         public ObservableCollectionExtended<string> AvailableRVCModels { get; set; } = new();
         public ObservableCollectionExtended<string> AvailableRVCIndexes { get; set; } = new();
         [Reactive] public ReactiveCommand<string, Unit>? OpenRecentCommand { get; private set; }
+        public ReactiveCommand<Unit, Unit> OnMenuRvsynthCommand { get; private set; } = null!;
         [Reactive] public ReactiveCommand<string, Unit>? OpenTemplateCommand { get; private set; }
         public ObservableCollectionExtended<MenuItemViewModel> OpenRecent => openRecent;
         public ObservableCollectionExtended<MenuItemViewModel> OpenTemplates => openTemplates;
@@ -162,36 +171,8 @@ namespace OpenUtau.App.ViewModels {
             NewProject();
         }
 
-        private void LoadRVCModels() {
-            var modelPath = Path.Combine(AppContext.BaseDirectory, "rvc", "model");
-            if (Directory.Exists(modelPath)) {
-                var models = Directory.GetFiles(modelPath, "*.pth")
-                    .Select(Path.GetFileNameWithoutExtension)
-                    .ToList();
-                AvailableRVCModels.Clear();
-                AvailableRVCModels.AddRange(models);
-            }
-        }
-
-        private void LoadRVCIndexes() {
-            var indexPath = Path.Combine(AppContext.BaseDirectory, "rvc", "index");
-            if (Directory.Exists(indexPath)) {
-                var indexes = Directory.GetFiles(indexPath, "*.index")
-                    .Select(Path.GetFileNameWithoutExtension)
-                    .ToList();
-                AvailableRVCIndexes.Clear();
-                AvailableRVCIndexes.AddRange(indexes);
-            }
-        }
-
-        private void ShowMessageBox(string message) {
-            var dialog = new Window {
-                Title = "Message",
-                Content = new TextBlock { Text = message, Margin = new Thickness(10) },
-                Width = 300,
-                Height = 150
-            };
-            dialog.Show();
+        private void ProcessRVC() {
+            _ = RunRVCProcessing();
         }
 
         public void NewProject() {
@@ -245,22 +226,20 @@ namespace OpenUtau.App.ViewModels {
             }
             Core.Format.Formats.ImportTracks(DocManager.Inst.Project, files, importTempo);
         }
-        private async void ProcessRVC() {
+        private async Task RunRVCProcessing() {
             if (string.IsNullOrEmpty(SelectedRVCModel) || string.IsNullOrEmpty(SelectedRVCIndex)) {
                 ShowMessageBox("Please select an RVC model and an index file.");
                 return;
             }
 
-            private string GetCurrentTrackAudioPath() {
-            return Path.Combine(AppContext.BaseDirectory, "renders", "current_track.wav");
-        }
-
-        string modelPath = Path.Combine(AppContext.BaseDirectory, "rvc", "model", SelectedRVCModel + ".pth");
+            string modelPath = Path.Combine(AppContext.BaseDirectory, "rvc", "model", SelectedRVCModel + ".pth");
             string indexPath = Path.Combine(AppContext.BaseDirectory, "rvc", "index", SelectedRVCIndex + ".index");
             string inputFilePath = GetCurrentTrackAudioPath();
             string outputFilePath = Path.Combine(AppContext.BaseDirectory, "renders", "rvc_output.wav");
 
-            await RvcInferenceEngine.Process(modelPath, indexPath, inputFilePath, outputFilePath, 0.0, progress => {
+            var engine = new RvcInferenceEngine(modelPath, indexPath);
+            await engine.ProcessAsync(inputFilePath, outputFilePath, 0.0, progress => {
+
                 // Update progress if needed
             });
 
@@ -311,12 +290,6 @@ namespace OpenUtau.App.ViewModels {
         public void RefreshOpenRecent() {
             openRecent.Clear();
             openRecent.AddRange(Core.Util.Preferences.Default.RecentFiles.Select(file => new MenuItemViewModel() {
-                // ✅ Load Available RVC Models & Indexes
-LoadRVCModels();
-LoadRVCIndexes();
-
-// ✅ Create Command for Processing RVC
-ProcessRVCCommand = ReactiveCommand.Create(ProcessRVC);
                 Header = file,
                 Command = OpenRecentCommand,
                 CommandParameter = file,

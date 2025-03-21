@@ -13,8 +13,8 @@
 
     <!-- Top Mode Selection & Back Button -->
     <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Top">
-      <ComboBox Width="200" 
-                Items="{Binding ModeOptions}" 
+      <ComboBox Width="200"
+                ItemsSource="{Binding AvailableRVCModels}" 
                 SelectedItem="{Binding SelectedMode}" />
       <Button Content="Back" Command="{Binding BackCommand}" Margin="10,0,0,0" />
     </StackPanel>
@@ -24,28 +24,28 @@
       <StackPanel Spacing="10">
 
         <!-- Single Model Selection -->
-        <StackPanel IsVisible="{Binding IsSingleModel}">
-          <TextBlock Text="Select Model:" FontWeight="Bold"/>
-          <ComboBox Items="{Binding AvailableModels}" SelectedItem="{Binding SelectedModel}" />
+          <StackPanel IsVisible="{Binding IsSingleModel}">
+              <TextBlock Text="Select Model:" FontWeight="Bold"/>
+              <ComboBox ItemsSource="{Binding AvailableModels}" SelectedItem="{Binding SelectedModel}" />
 
-          <TextBlock Text="Select Index File:" FontWeight="Bold" Margin="0,10,0,0"/>
-          <ComboBox Items="{Binding AvailableIndexFiles}" SelectedItem="{Binding SelectedIndexFile}" />
-        </StackPanel>
+              <TextBlock Text="Select Index File:" FontWeight="Bold" Margin="0,10,0,0"/>
+              <ComboBox ItemsSource="{Binding AvailableIndexFiles}" SelectedItem="{Binding SelectedIndexFile}" />
+          </StackPanel>
 
         <!-- Multi Model Selection (per track) -->
-        <StackPanel IsVisible="{Binding IsMultiModel}">
-          <ItemsControl Items="{Binding TrackModelSelections}">
-            <ItemsControl.ItemTemplate>
-              <DataTemplate>
-                <StackPanel Orientation="Horizontal" Margin="0,5">
-                  <TextBlock Text="{Binding TrackName}" Width="120"/>
-                  <ComboBox Width="250" Items="{Binding AvailableModels}" SelectedItem="{Binding SelectedModel}"/>
-                  <ComboBox Width="250" Items="{Binding AvailableIndexFiles}" SelectedItem="{Binding SelectedIndexFile}" Margin="5,0,0,0"/>
-                </StackPanel>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
-        </StackPanel>
+          <StackPanel IsVisible="{Binding IsMultiModel}">
+              <ItemsControl ItemsSource="{Binding TrackModelSelections}">
+                  <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                          <StackPanel Orientation="Horizontal" Margin="0,5">
+                              <TextBlock Text="{Binding TrackName}" Width="120"/>
+                              <ComboBox Width="250" ItemsSource="{Binding AvailableModels}" SelectedItem="{Binding SelectedModel}"/>
+                              <ComboBox Width="250" ItemsSource="{Binding AvailableIndexFiles}" SelectedItem="{Binding SelectedIndexFile}" Margin="5,0,0,0"/>
+                          </StackPanel>
+                      </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+              </ItemsControl>
+          </StackPanel>
 
         <!-- RVC Sliders -->
         <StackPanel Spacing="8">
