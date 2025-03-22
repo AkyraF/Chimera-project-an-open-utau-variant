@@ -10,6 +10,11 @@ using OpenUtau.RVC.Processing;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using Microsoft.ML.OnnxRuntime;
 using TorchSharp;
+using Avalonia.Controls.ApplicationLifetimes;
+using System.Windows.Forms;
+using System.Collections.Generic;
+using Avalonia.Controls;
+using Avalonia.Platform.Storage;
 
 namespace OpenUtau.App.ViewModels {
     public class TrackModelSelection : ViewModelBase {
@@ -149,7 +154,44 @@ namespace OpenUtau.App.ViewModels {
 
         public RvsynthViewModel() {
             // ✅ Initialize Commands to Prevent Null Errors
-            ProcessCommand = ReactiveCommand.Create(() => { Debug.WriteLine("✅ Processing..."); });
+            ProcessCommand = ReactiveCommand.CreateFromTask(async () => {
+                Debug.WriteLine("🟡 Process button clicked.");
+
+                if (App.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop &&
+                    desktop.MainWindow is Window mainWindow) {
+
+                    // 📁 Use StorageProvider to open folder picker
+                    var folders = await mainWindow.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions {
+                        Title = "Select Export Folder",
+                        AllowMultiple = false
+                    });
+
+                    var exportFolder = folders?.FirstOrDefault();
+                    if (exportFolder == null) {
+                        Debug.WriteLine("⚠️ Export folder selection cancelled.");
+                        return;
+                    }
+
+                    string exportPath = exportFolder.Path.LocalPath;
+                    Debug.WriteLine($"📁 Export path selected: {exportPath}");
+                    Debug.WriteLine("✅ Processing started...");
+
+                    // ✅ Close Rvsynth window
+                    foreach (var window in desktop.Windows) {
+                        if (window.DataContext == this) {
+                            window.Close(); // ⬅️ This ensures only the active RvsynthView closes
+                            break;
+                        }
+                    }
+
+                    // ✅ Now begin your inference process — replace this with your actual call
+                    // await RvcInferenceEngine.RunAsync(...); or whatever method you use
+
+                } else {
+                    Debug.WriteLine("❌ Could not access main window.");
+                }
+            });
+
             BackCommand = ReactiveCommand.Create(() => {
                 Debug.WriteLine("🔙 Back button pressed, returning to mode selection...");
 
@@ -199,15 +241,25 @@ namespace OpenUtau.App.ViewModels {
         private void LoadAvailableIndexFiles() {
             try {
                 AvailableIndexFiles.Clear();
-                var indexPath = Path.Combine(AppContext.BaseDirectory, "rvc", "index");
-                if (Directory.Exists(indexPath)) {
-                    var indexes = Directory.GetFiles(indexPath, "*.index");
-                    foreach (var index in indexes) {
-                        AvailableIndexFiles.Add(Path.GetFileName(index));
+                var indexRoot = Path.Combine(AppContext.BaseDirectory, "rvc", "index");
+
+                Debug.WriteLine($"🔍 Looking for index folders in: {indexRoot}");
+
+                if (Directory.Exists(indexRoot)) {
+                    var indexDirs = Directory.GetDirectories(indexRoot);
+
+                    foreach (var dir in indexDirs) {
+                        var folderName = Path.GetFileName(dir);
+                        Debug.WriteLine($"📁 Found index folder: {folderName}");
+                        AvailableIndexFiles.Add(folderName);
                     }
+
+                    Debug.WriteLine($"✅ Total index folders loaded: {AvailableIndexFiles.Count}");
+                } else {
+                    Debug.WriteLine("❌ Index directory does not exist.");
                 }
             } catch (Exception ex) {
-                Debug.WriteLine($"❌ Error loading index files: {ex.Message}");
+                Debug.WriteLine($"❌ Error loading index folders: {ex.Message}");
             }
         }
 
