@@ -3,11 +3,9 @@ using System.Collections.ObjectModel;
 using ReactiveUI;
 using System.IO;
 using System.Linq;
-using Avalonia.Controls;
-using OpenUtau.Core;
 using System.Reactive;
 using System.Diagnostics;
-using OpenUtau.RVC.Utils;
+using OpenUtau.Core;
 using OpenUtau.RVC.Processing;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using Microsoft.ML.OnnxRuntime;
@@ -24,26 +22,74 @@ namespace OpenUtau.App.ViewModels {
 
     public class RvsynthViewModel : ViewModelBase {
         // Mode selection
-        public ObservableCollection<string> ModeOptions { get; } = new() { "Single Model", "Multi Model" };
-        private string _selectedMode = "Single Model";
+        public ObservableCollection<string> ModeOptions { get; } = new() { "Select Mode", "Single Model", "Multi Model" };
+
+        private string _selectedMode = "Select Mode";
         public string SelectedMode {
             get => _selectedMode;
             set {
-                this.RaiseAndSetIfChanged(ref _selectedMode, value);
-                this.RaisePropertyChanged(nameof(IsSingleModel));
-                this.RaisePropertyChanged(nameof(IsMultiModel));
+                if (value != _selectedMode) {
+                    try {
+                        _selectedMode = value;
+                        this.RaisePropertyChanged(nameof(SelectedMode));
+                        this.RaisePropertyChanged(nameof(IsSingleModel));
+                        this.RaisePropertyChanged(nameof(IsMultiModel));
+
+                        // Ensure the mode selection is visible until the user picks a mode
+                        IsModeSelectionVisible = _selectedMode == "Select Mode";
+                        IsMainContentVisible = _selectedMode != "Select Mode";
+                        IsBackButtonVisible = _selectedMode != "Select Mode";
+
+                        // Debugging log
+                        Debug.WriteLine($"🔄 Mode changed to: {_selectedMode}");
+
+                        // Ensure UI elements are refreshed properly
+                        LoadAvailableModels();
+                        LoadAvailableIndexFiles();
+                        LoadTrackList();
+                    } catch (Exception ex) {
+                        Debug.WriteLine($"❌ Error changing mode: {ex.Message}");
+                    }
+                }
             }
         }
-
         public bool IsSingleModel => SelectedMode == "Single Model";
         public bool IsMultiModel => SelectedMode == "Multi Model";
 
+        private bool _isModeSelectionVisible = true;
+        public bool IsModeSelectionVisible {
+            get => _isModeSelectionVisible;
+            set => this.RaiseAndSetIfChanged(ref _isModeSelectionVisible, value);
+        }
+
+        private bool _isMainContentVisible = false;
+        public bool IsMainContentVisible {
+            get => _isMainContentVisible;
+            set => this.RaiseAndSetIfChanged(ref _isMainContentVisible, value);
+        }
+
+        private bool _isBackButtonVisible = false;
+        public bool IsBackButtonVisible {
+            get => _isBackButtonVisible;
+            set => this.RaiseAndSetIfChanged(ref _isBackButtonVisible, value);
+        }
+
+       
+
         // Model selections
         public ObservableCollection<string> AvailableModels { get; } = new();
-        public string SelectedModel { get; set; } = string.Empty;
+        private string _selectedModel = string.Empty;
+        public string SelectedModel {
+            get => _selectedModel;
+            set => this.RaiseAndSetIfChanged(ref _selectedModel, value);
+        }
 
         public ObservableCollection<string> AvailableIndexFiles { get; } = new();
-        public string SelectedIndexFile { get; set; } = string.Empty;
+        private string _selectedIndexFile = string.Empty;
+        public string SelectedIndexFile {
+            get => _selectedIndexFile;
+            set => this.RaiseAndSetIfChanged(ref _selectedIndexFile, value);
+        }
 
         // Track selections for Multi-model option
         public ObservableCollection<TrackModelSelection> TrackModelSelections { get; } = new();
@@ -103,72 +149,82 @@ namespace OpenUtau.App.ViewModels {
 
         public RvsynthViewModel() {
             // ✅ Initialize Commands to Prevent Null Errors
-            ProcessCommand = ReactiveCommand.Create(() => { Debug.WriteLine("Processing..."); });
-            BackCommand = ReactiveCommand.Create(() => { Debug.WriteLine("Going Back..."); });
+            ProcessCommand = ReactiveCommand.Create(() => { Debug.WriteLine("✅ Processing..."); });
+            BackCommand = ReactiveCommand.Create(() => {
+                Debug.WriteLine("🔙 Back button pressed, returning to mode selection...");
 
+                // Reset mode selection
+                SelectedMode = "Select Mode";
+
+                // Restore visibility settings
+                IsModeSelectionVisible = true;
+                IsMainContentVisible = false;
+                IsBackButtonVisible = false;
+            });
+
+
+            // ✅ Ensure everything is loaded properly
             LoadAvailableModels();
             LoadAvailableIndexFiles();
             LoadTrackList();
         }
 
-        private float[] RunInference(float[] inputAudio, string modelPath, string indexPath) {
-            bool isOnnx = modelPath.EndsWith(".onnx");
-
-            if (isOnnx) {
-                var inputTensor = new DenseTensor<float>(inputAudio, new[] { 1, inputAudio.Length });
-                var inputs = new NamedOnnxValue[] {
-            NamedOnnxValue.CreateFromTensor("input", inputTensor)
-        };
-
-                using var onnxSession = new InferenceSession(modelPath);
-                using var results = onnxSession.Run(inputs);
-                var outputTensor = results.First().AsTensor<float>();
-                return outputTensor.ToArray();
-            } else {
-                var torchModel = torch.jit.load(modelPath);
-                using var inputTensor = torch.tensor(inputAudio, new long[] { 1, inputAudio.Length });
-
-                torchModel.eval();
-                var result = torchModel.call(inputTensor);
-
-                if (result is torch.Tensor outputTensor) {
-                    return outputTensor.data<float>().ToArray();
-                } else {
-                    Console.WriteLine("❌ Torch model returned unexpected output.");
-                    return new float[0];
-                }
-            }
-        }
-
         private void LoadAvailableModels() {
-            var modelPath = Path.Combine(AppContext.BaseDirectory, "rvc", "model");
-            if (Directory.Exists(modelPath)) {
-                var models = Directory.GetFiles(modelPath, "*.*")
-                    .Where(file => file.EndsWith(".pth") || file.EndsWith(".onnx"));
+            try {
                 AvailableModels.Clear();
-                foreach (var model in models)
-                    AvailableModels.Add(Path.GetFileName(model));
+                var modelPath = Path.Combine(AppContext.BaseDirectory, "rvc", "model");
+
+                Debug.WriteLine($"🔍 Looking for models in: {modelPath}");
+
+                if (Directory.Exists(modelPath)) {
+                    var models = Directory.GetFiles(modelPath, "*.*")
+                        .Where(file => file.EndsWith(".pth") || file.EndsWith(".onnx"));
+
+                    foreach (var model in models) {
+                        var fileName = Path.GetFileName(model);
+                        Debug.WriteLine($"📦 Found model: {fileName}");
+                        AvailableModels.Add(fileName);
+                    }
+
+                    Debug.WriteLine($"✅ Total models loaded: {AvailableModels.Count}");
+                } else {
+                    Debug.WriteLine("❌ Model directory does not exist.");
+                }
+            } catch (Exception ex) {
+                Debug.WriteLine($"❌ Error loading models: {ex.Message}");
             }
         }
+
 
         private void LoadAvailableIndexFiles() {
-            var indexPath = Path.Combine(AppContext.BaseDirectory, "rvc", "index");
-            if (Directory.Exists(indexPath)) {
-                var indexes = Directory.GetFiles(indexPath, "*.index");
+            try {
                 AvailableIndexFiles.Clear();
-                foreach (var index in indexes)
-                    AvailableIndexFiles.Add(Path.GetFileName(index));
+                var indexPath = Path.Combine(AppContext.BaseDirectory, "rvc", "index");
+                if (Directory.Exists(indexPath)) {
+                    var indexes = Directory.GetFiles(indexPath, "*.index");
+                    foreach (var index in indexes) {
+                        AvailableIndexFiles.Add(Path.GetFileName(index));
+                    }
+                }
+            } catch (Exception ex) {
+                Debug.WriteLine($"❌ Error loading index files: {ex.Message}");
             }
         }
 
         private void LoadTrackList() {
-            TrackModelSelections.Clear();
-            foreach (var track in DocManager.Inst.Project.tracks) {
-                TrackModelSelections.Add(new TrackModelSelection {
-                    TrackName = $"{track.TrackNo} - {track.Singer?.Name ?? "Unnamed Track"}",
-                    AvailableModels = AvailableModels,
-                    AvailableIndexFiles = AvailableIndexFiles
-                });
+            try {
+                TrackModelSelections.Clear();
+                if (DocManager.Inst?.Project?.tracks != null) {
+                    foreach (var track in DocManager.Inst.Project.tracks) {
+                        TrackModelSelections.Add(new TrackModelSelection {
+                            TrackName = $"{track.TrackNo} - {track.Singer?.Name ?? "Unnamed Track"}",
+                            AvailableModels = AvailableModels,
+                            AvailableIndexFiles = AvailableIndexFiles
+                        });
+                    }
+                }
+            } catch (Exception ex) {
+                Debug.WriteLine($"❌ Error loading track list: {ex.Message}");
             }
         }
     } // Closing class

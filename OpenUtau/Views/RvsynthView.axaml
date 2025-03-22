@@ -3,97 +3,122 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="using:OpenUtau.App.ViewModels"
+        xmlns:conv="clr-namespace:OpenUtau.App.Converters"
         mc:Ignorable="d"
         x:Class="OpenUtau.App.Views.RvsynthView"
         Title="Rvsynth Plugin"
         Width="700" Height="700"
         WindowStartupLocation="CenterOwner">
 
-  <Grid Margin="15" RowDefinitions="Auto,*">
+    <Grid Margin="15" RowDefinitions="Auto,*">
 
-    <!-- Top Mode Selection & Back Button -->
-    <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Top">
-      <ComboBox Width="200"
-                ItemsSource="{Binding AvailableRVCModels}" 
-                SelectedItem="{Binding SelectedMode}" />
-      <Button Content="Back" Command="{Binding BackCommand}" Margin="10,0,0,0" />
-    </StackPanel>
-
-    <!-- Main Content Area -->
-    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,10,0,0">
-      <StackPanel Spacing="10">
-
-        <!-- Single Model Selection -->
-          <StackPanel IsVisible="{Binding IsSingleModel}">
-              <TextBlock Text="Select Model:" FontWeight="Bold"/>
-              <ComboBox ItemsSource="{Binding AvailableModels}" SelectedItem="{Binding SelectedModel}" />
-
-              <TextBlock Text="Select Index File:" FontWeight="Bold" Margin="0,10,0,0"/>
-              <ComboBox ItemsSource="{Binding AvailableIndexFiles}" SelectedItem="{Binding SelectedIndexFile}" />
-          </StackPanel>
-
-        <!-- Multi Model Selection (per track) -->
-          <StackPanel IsVisible="{Binding IsMultiModel}">
-              <ItemsControl ItemsSource="{Binding TrackModelSelections}">
-                  <ItemsControl.ItemTemplate>
-                      <DataTemplate>
-                          <StackPanel Orientation="Horizontal" Margin="0,5">
-                              <TextBlock Text="{Binding TrackName}" Width="120"/>
-                              <ComboBox Width="250" ItemsSource="{Binding AvailableModels}" SelectedItem="{Binding SelectedModel}"/>
-                              <ComboBox Width="250" ItemsSource="{Binding AvailableIndexFiles}" SelectedItem="{Binding SelectedIndexFile}" Margin="5,0,0,0"/>
-                          </StackPanel>
-                      </DataTemplate>
-                  </ItemsControl.ItemTemplate>
-              </ItemsControl>
-          </StackPanel>
-
-        <!-- RVC Sliders -->
-        <StackPanel Spacing="8">
-
-          <TextBlock Text="Pitch (semitones):" FontWeight="Bold"/>
-          <Slider Minimum="-12" Maximum="12" Value="{Binding Pitch}" IsSnapToTickEnabled="True" TickFrequency="1"/>
-          <TextBlock Text="{Binding Pitch, StringFormat='Pitch: {0}'}" FontSize="12"/>
-
-          <TextBlock Text="Index Ratio:" FontWeight="Bold" Margin="0,10,0,0"/>
-          <Slider Minimum="0" Maximum="1" Value="{Binding IndexRatio}" TickFrequency="0.01" IsSnapToTickEnabled="True"/>
-          <TextBlock Text="{Binding IndexRatio, StringFormat='Index Ratio: {0:F2}'}" FontSize="12"/>
-
-          <TextBlock Text="Filter Radius:" FontWeight="Bold" Margin="0,10,0,0"/>
-          <Slider Minimum="0" Maximum="7" Value="{Binding FilterRadius}" IsSnapToTickEnabled="True" TickFrequency="1"/>
-          <TextBlock Text="{Binding FilterRadius, StringFormat='Filter Radius: {0}'}" FontSize="12"/>
-
-          <TextBlock Text="Resample Rate (Hz):" FontWeight="Bold" Margin="0,10,0,0"/>
-          <Slider Minimum="0" Maximum="48000" Value="{Binding ResampleRate}" TickFrequency="1000" IsSnapToTickEnabled="True"/>
-          <TextBlock Text="{Binding ResampleRate, StringFormat='Resample Rate: {0} Hz'}" FontSize="12"/>
-
-          <TextBlock Text="RMS Mix Rate:" FontWeight="Bold" Margin="0,10,0,0"/>
-          <Slider Minimum="0" Maximum="1" Value="{Binding RmsMixRate}" TickFrequency="0.01" IsSnapToTickEnabled="True"/>
-          <TextBlock Text="{Binding RmsMixRate, StringFormat='RMS Mix Rate: {0:F2}'}" FontSize="12"/>
-
-          <TextBlock Text="Protect Voiceless:" FontWeight="Bold" Margin="0,10,0,0"/>
-          <Slider Minimum="0" Maximum="1" Value="{Binding ProtectVoiceless}" TickFrequency="0.01" IsSnapToTickEnabled="True"/>
-          <TextBlock Text="{Binding ProtectVoiceless, StringFormat='Protect Voiceless: {0:F2}'}" FontSize="12"/>
-
-          <TextBlock Text="Feature Retrieval Ratio:" FontWeight="Bold" Margin="0,10,0,0"/>
-          <Slider Minimum="0" Maximum="1" Value="{Binding FeatureRetrievalRatio}" TickFrequency="0.01" IsSnapToTickEnabled="True"/>
-          <TextBlock Text="{Binding FeatureRetrievalRatio, StringFormat='Feature Retrieval Ratio: {0:F2}'}" FontSize="12"/>
-          
-          <TextBlock Text="Voice Envelope Mix:" FontWeight="Bold" Margin="0,10,0,0"/>
-          <Slider Minimum="0" Maximum="1" Value="{Binding VoiceEnvelopeMix}" TickFrequency="0.01" IsSnapToTickEnabled="True"/>
-          <TextBlock Text="{Binding VoiceEnvelopeMix, StringFormat='Voice Envelope Mix: {0:F2}'}" FontSize="12"/>
-
+        <!-- Mode Selection (Visible Initially, Hides After Selection) -->
+        <StackPanel Name="ModeSelectionPanel" IsVisible="{Binding IsModeSelectionVisible}">
+            <TextBlock Text="Select Mode:" FontWeight="Bold"/>
+            <ComboBox Name="ModeComboBox"
+                      Width="200"
+                      ItemsSource="{Binding ModeOptions}"
+                      SelectedItem="{Binding SelectedMode, Mode=TwoWay}"
+                      PlaceholderText="Select Mode" />
         </StackPanel>
 
-        <!-- Processing Button -->
-        <Button Content="Process"
-                Command="{Binding ProcessCommand}"
-                HorizontalAlignment="Right"
-                Margin="0,20,0,0"
-                Width="150"
-                Height="35"/>
-        
-      </StackPanel>
-    </ScrollViewer>
+        <!-- Main Content Area (Hidden Initially, Shown After Mode Selection) -->
+        <ScrollViewer Name="MainContent" IsVisible="{Binding IsMainContentVisible}"
+                      Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,10,0,0">
+            <StackPanel Spacing="10">
 
-  </Grid>
+                <!-- Back Button (Top Left, Only Visible After Mode Selection) -->
+                <Button Name="BackButton" Content="Back"
+                        Command="{Binding BackCommand}"
+                        HorizontalAlignment="Left" Margin="0,0,0,10"
+                        IsVisible="{Binding IsBackButtonVisible}"/>
+
+                <!-- Single Model Selection -->
+                <StackPanel Name="SingleModelPanel"
+                            Opacity="{Binding IsSingleModel, Converter={StaticResource BoolToOpacityConverter}}"
+                            IsHitTestVisible="{Binding IsSingleModel}">
+
+                    <TextBlock Text="Select Model:" FontWeight="Bold"/>
+                    <ComboBox Width="250"
+                              ItemsSource="{Binding AvailableModels}"
+                              SelectedItem="{Binding SelectedModel}"/>
+
+                    <TextBlock Text="Select Index File:" FontWeight="Bold" Margin="0,10,0,0"/>
+                    <ComboBox Width="250"
+                              ItemsSource="{Binding AvailableIndexFiles}"
+                              SelectedItem="{Binding SelectedIndexFile}"/>
+                </StackPanel>
+
+                <!-- Multi Model Selection (per track) -->
+                <StackPanel Name="MultiModelPanel" IsVisible="{Binding IsMultiModel}">
+                    <ItemsControl ItemsSource="{Binding TrackModelSelections}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" Margin="0,5">
+                                    <TextBlock Text="{Binding TrackName}" Width="120"/>
+                                    <ComboBox Width="250" ItemsSource="{Binding AvailableModels}" SelectedItem="{Binding SelectedModel}"/>
+                                    <ComboBox Width="250" ItemsSource="{Binding AvailableIndexFiles}" SelectedItem="{Binding SelectedIndexFile}" Margin="5,0,0,0"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+
+                <!-- RVC Sliders -->
+                <StackPanel Spacing="8">
+
+                    <TextBlock Text="Pitch (semitones):" FontWeight="Bold"/>
+                    <Slider Classes="fader"
+                            Minimum="-12" Maximum="12"
+                            Value="{Binding Pitch}"
+                            IsSnapToTickEnabled="True"
+                            TickFrequency="1"/>
+                    <TextBlock Text="{Binding Pitch, StringFormat='Pitch: {0}'}" FontSize="12"/>
+
+                    <TextBlock Text="Index Ratio:" FontWeight="Bold" Margin="0,10,0,0"/>
+                    <Slider Classes="fader"
+                            Minimum="0" Maximum="1"
+                            Value="{Binding IndexRatio}"
+                            TickFrequency="0.01"
+                            IsSnapToTickEnabled="True"/>
+                    <TextBlock Text="{Binding IndexRatio, StringFormat='Index Ratio: {0:F2}'}" FontSize="12"/>
+
+                    <TextBlock Text="Filter Radius:" FontWeight="Bold" Margin="0,10,0,0"/>
+                    <Slider Classes="fader"
+                            Minimum="0" Maximum="7"
+                            Value="{Binding FilterRadius}"
+                            IsSnapToTickEnabled="True"
+                            TickFrequency="1"/>
+                    <TextBlock Text="{Binding FilterRadius, StringFormat='Filter Radius: {0}'}" FontSize="12"/>
+
+                    <TextBlock Text="Resample Rate (Hz):" FontWeight="Bold" Margin="0,10,0,0"/>
+                    <Slider Classes="fader"
+                            Minimum="0" Maximum="48000"
+                            Value="{Binding ResampleRate}"
+                            TickFrequency="1000"
+                            IsSnapToTickEnabled="True"/>
+                    <TextBlock Text="{Binding ResampleRate, StringFormat='Resample Rate: {0} Hz'}" FontSize="12"/>
+
+                    <TextBlock Text="RMS Mix Rate:" FontWeight="Bold" Margin="0,10,0,0"/>
+                    <Slider Classes="fader"
+                            Minimum="0" Maximum="1"
+                            Value="{Binding RmsMixRate}"
+                            TickFrequency="0.01"
+                            IsSnapToTickEnabled="True"/>
+                    <TextBlock Text="{Binding RmsMixRate, StringFormat='RMS Mix Rate: {0:F2}'}" FontSize="12"/>
+
+                </StackPanel>
+
+                <!-- Processing Button -->
+                <Button Content="Process"
+                        Command="{Binding ProcessCommand}"
+                        HorizontalAlignment="Right"
+                        Margin="0,20,0,0"
+                        Width="150"
+                        Height="35"/>
+
+            </StackPanel>
+        </ScrollViewer>
+
+    </Grid>
 </Window>

@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using System.Text.RegularExpressions;
 using System.Threading;
 using Avalonia;
 using Avalonia.Controls;
@@ -14,13 +13,14 @@ using OpenUtau.App.Views;
 using OpenUtau.Classic;
 using OpenUtau.Core;
 using Serilog;
-using YamlDotNet.Core.Tokens;
+using OpenUtau.Converters; // ✅ Corrected namespace for the converter
 
 namespace OpenUtau.App {
     public class App : Application {
         public override void Initialize() {
             Log.Information("Initializing application.");
             AvaloniaXamlLoader.Load(this);
+            RegisterGlobalResources(); // ✅ Register converter globally
             InitializeCulture();
             InitializeTheme();
             Log.Information("Initialized application.");
@@ -33,6 +33,11 @@ namespace OpenUtau.App {
             }
 
             base.OnFrameworkInitializationCompleted();
+        }
+
+        private void RegisterGlobalResources() {
+            // ✅ Register the BoolToOpacityConverter to make it usable in XAML
+            Resources["BoolToOpacityConverter"] = new BoolToOpacityConverter();
         }
 
         public void InitializeCulture() {
